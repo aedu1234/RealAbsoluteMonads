@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Herd Mentality</title>
+        <script src="/socket.io/socket.io.js"></script>
+        <style>
+            /* General Styling */
+            body {
+                font-family: "Comic Sans MS", cursive, sans-serif;
+
+                margin: 0;
+                padding: 0;
+                background-color: white;
+                background-image: url("https://t3.ftcdn.net/jpg/03/55/42/18/360_F_355421805_U6bBeKiEZOxhBq46pTGp2GjYcAg3pxo9.jpg");
+                background-size: 1000px 1000px;
+                background-position:
+                    0 0,
+                    25px 25px;
+            }
+
+            .container {
+                max-width: 600px;
+                margin: 20px auto;
+                padding: 20px;
+                border-radius: 10px;
+                background-color: #f8f4ff;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+                border: 2px solid black;
+            }
+
+            h1,
+            h2 {
+                color: black;
+            }
+
+            input {
+                width: calc(100% - 20px);
+                padding: 10px;
+                margin: 10px 0;
+                border: 2px solid black;
+                border-radius: 5px;
+                background-color: white;
+            }
+
+            button {
+                background-color: #c299ff;
+                color: black;
+                padding: 10px 20px;
+                border: 2px solid black;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            }
+
+            button:hover {
+                background-color: #d3aaff;
+            }
+
+            .hidden {
+                display: none;
+            }
+
+            #playerList {
+                list-style-type: none;
+                padding: 0;
+                text-align: left;
+            }
+
+            #playerList li {
+                background: white;
+                color: black;
+                border: 2px solid black;
+                margin: 5px 0;
+                padding: 10px;
+                border-radius: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container" id="roleSelectionScreen">
+            <h1>Herd Mentality</h1>
+            <p>Select your role:</p>
+            <button id="masterRole">Master</button>
+            <button id="playerRole">Player</button>
+        </div>
+
+        <div class="container hidden" id="masterScreen">
+            <h1>Herd Mentality - Master Screen</h1>
+            <p>Game Code: <span id="displayGameCode"></span></p>
+            <input
+                type="text"
+                id="newQuestion"
+                placeholder="Enter a question"
+            />
+            <button id="startQuestion">Start Question</button>
+            <ul id="playerList"></ul>
+        </div>
+
+        <div class="container hidden" id="joinScreen">
+            <h1>Join Game</h1>
+            <p>Enter the game code to join:</p>
+            <input type="text" id="gameCode" placeholder="Game Code" />
+            <input type="text" id="playerName" placeholder="Your Name" />
+            <button id="joinGame">Join Game</button>
+        </div>
+
+        <div class="container hidden" id="questionScreen">
+            <h2 id="question">Question goes here...</h2>
+            <input type="text" id="answer" placeholder="Your Answer" />
+            <button id="submitAnswer">Submit</button>
+        </div>
+
+        <div class="container hidden" id="resultsScreen">
+            <h2>Results</h2>
+            <p id="commonAnswer">Most common answer:</p>
+            <p id="yourTokens">Your tokens: 0</p>
+            <p id="purpleCow" class="hidden">🐄 Purple Cow Alert!</p>
+            <button id="playAgain">Play Again</button>
+        </div>
+
+        <script>
+            const socket = io();
+
+            // Screens
+            const roleSelectionScreen = document.getElementById(
+                "roleSelectionScreen",
+            );
+            const masterScreen = document.getElementById("masterScreen");
+            const joinScreen = document.getElementById("joinScreen");
+            const questionScreen = document.getElementById("questionScreen");
+            const resultsScreen = document.getElementById("resultsScreen");
+
+            // Inputs
+            const gameCodeInput = document.getElementById("gameCode");
+            const playerNameInput = document.getElementById("playerName");
+            const newQuestionInput = document.getElementById("newQuestion");
+            const answerInput = document.getElementById("answer");
+
+            // Buttons
+            const masterRoleButton = document.getElementById("masterRole");
+            const playerRoleButton = document.getElementById("playerRole");
+            const joinGameButton = document.getElementById("joinGame");
+            const startQuestionButton =
+                document.getElementById("startQuestion");
+            const submitAnswerButton = document.getElementById("submitAnswer");
+            const playAgainButton = document.getElementById("playAgain");
+
+            // Results
+            const displayGameCode = document.getElementById("displayGameCode");
+            const playerList = document.getElementById("playerList");
+            const commonAnswerElement = document.getElementById("commonAnswer");
+            const yourTokensElement = document.getElementById("yourTokens");
+            const purpleCowElement = document.getElementById("purpleCow");
+
+            let userRole = null; // Track user role ('master' or 'player')
+            let currentTokens = 0;
+
+            // Handle Role Selection
+            masterRoleButton.addEventListener("click", () => {
+                const gameCode = prompt("Enter a game code for the session:");
+                if (gameCode) {
+                    userRole = "master"; // Set role as master
+                    socket.emit("join_game", {
+                        gameCode,
+                        playerName: "Master",
+                        role: "master",
+                    });
+                    roleSelectionScreen.classList.add("hidden");
+                    masterScreen.classList.remove("hidden");
+                    displayGameCode.textContent = gameCode;
+                }
+            });
+
+            playerRoleButton.addEventListener("click", () => {
+                userRole = "player"; // Set role as player
+                roleSelectionScreen.classList.add("hidden");
+                joinScreen.classList.remove("hidden");
+            });
+
+            // Join Game as Player
+            joinGameButton.addEventListener("click", () => {
+                // Remove the instruction text
+                const instructionText = document.querySelector("#joinScreen p");
+                if (instructionText) {
+                    instructionText.remove();
+                }
+
+                const gameCode = gameCodeInput.value;
+                const playerName = playerNameInput.value;
+
+                if (gameCode && playerName) {
+                    socket.emit("join_game", {
+                        gameCode,
+                        playerName,
+                        role: "player",
+                    });
+
+                    // Replace input fields with plain text
+                    const gameCodeText = document.createElement("p");
+                    gameCodeText.textContent = `Game Code: ${gameCode}`;
+                    gameCodeInput.parentElement.replaceChild(
+                        gameCodeText,
+                        gameCodeInput,
+                    );
+
+                    const playerNameText = document.createElement("p");
+                    playerNameText.textContent = `Player Name: ${playerName}`;
+                    playerNameInput.parentElement.replaceChild(
+                        playerNameText,
+                        playerNameInput,
+                    );
+
+                    // Have fun my pretties text replacement
+                    const funText = document.createElement("h1");
+                    funText.textContent = "Have fun my pretties";
+                    funText.style.fontFamily = "Comic Sans MS";
+                    funText.style.fontSize = "20px";
+
+                    const joinGameTitle =
+                        document.querySelector("#joinScreen h1");
+                    joinGameButton.parentElement.replaceChild(
+                        funText,
+                        joinGameTitle,
+                    );
+
+                    // Remove the Join Game button
+                    joinGameButton.parentElement.removeChild(joinGameButton);
+                }
+            });
+
+            // Handle Role Assignment
+            socket.on("role_assigned", ({ role }) => {
+                if (role === "master") {
+                    roleSelectionScreen.classList.add("hidden");
+                    masterScreen.classList.remove("hidden");
+                } else {
+                    roleSelectionScreen.classList.add("hidden");
+                    joinScreen.classList.remove("hidden");
+                }
+            });
+
+            // Update Player List
+            socket.on("update_players", (players) => {
+                playerList.innerHTML = ""; // Clear the current list
+                Object.values(players).forEach((playerName) => {
+                    const li = document.createElement("li");
+                    li.textContent = playerName;
+                    playerList.appendChild(li);
+                });
+            });
+
+            // Start Question
+            startQuestionButton.addEventListener("click", () => {
+                const question = newQuestionInput.value;
+
+                if (question) {
+                    socket.emit("start_question", {
+                        gameCode: displayGameCode.textContent,
+                        question,
+                    });
+                    newQuestionInput.value = "";
+                }
+            });
+
+            // Display Question
+            socket.on("new_question", (question) => {
+                masterScreen.classList.add("hidden");
+                questionScreen.classList.remove("hidden");
+                document.getElementById("question").innerText = question;
+            });
+
+            // Submit Answer
+            submitAnswerButton.addEventListener("click", () => {
+                const answer = answerInput.value;
+
+                if (answer) {
+                    const gameCode =
+                        userRole === "master"
+                            ? displayGameCode.textContent
+                            : gameCodeInput.value;
+
+                    socket.emit("submit_answer", { gameCode, answer });
+                    questionScreen.classList.add("hidden");
+                    resultsScreen.classList.remove("hidden");
+                }
+            });
+
+            // Show Results
+            socket.on(
+                "show_results",
+                ({ mostCommonAnswer, tokens, purpleCowPlayer }) => {
+                    commonAnswerElement.innerText = `Most common answer: ${mostCommonAnswer}`;
+                    yourTokensElement.innerText = `Your tokens: ${tokens[socket.id] || 0}`;
+
+                    if (purpleCowPlayer === socket.id) {
+                        purpleCowElement.classList.remove("hidden");
+                    } else {
+                        purpleCowElement.classList.add("hidden");
+                    }
+
+                    // Display their token count
+                    if (tokens[socket.id] !== undefined) {
+                        yourTokensElement.innerText = `Your tokens: ${tokens[socket.id]}`;
+                    }
+                },
+            );
+
+            // Reset for Next Round
+            socket.on("reset_for_next_question", ({ tokens }) => {
+                resultsScreen.classList.add("hidden");
+                questionScreen.classList.remove("hidden");
+                document.getElementById("question").innerText =
+                    "Waiting for new question...";
+                answerInput.disabled = true;
+                answerInput.placeholder = "Waiting for new question...";
+                yourTokensElement.innerText = `Your tokens: ${tokens[socket.id] || 0}`;
+            });
+
+            // Play Again
+            playAgainButton.addEventListener("click", () => {
+                if (userRole === "master") {
+                    // Emit play_again event from master
+                    const gameCode = displayGameCode.textContent;
+                    socket.emit("play_again", { gameCode });
+
+                    // Reset Master Screen to allow a new question
+                    resultsScreen.classList.add("hidden");
+                    masterScreen.classList.remove("hidden");
+                } else {
+                    // Reset Player Screen to wait for the next question
+                    resultsScreen.classList.add("hidden");
+                    questionScreen.classList.remove("hidden");
+                }
+            });
+
+            socket.on("new_question", ({ question, mostCommonAnswer }) => {
+                // Reset screens
+                resultsScreen.classList.add("hidden");
+                questionScreen.classList.remove("hidden");
+
+                // Update the question text
+                document.getElementById("question").innerText = question;
+
+                // Clear the most common answer
+                if (mostCommonAnswer === null) {
+                    commonAnswerElement.innerText =
+                        "Most common answer: None yet";
+                }
+            });
+        </script>
+    </body>
+</html>
+
